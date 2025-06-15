@@ -1,0 +1,15 @@
+{
+  "name": "02_historical-data-using-smart-api",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "smartapi-javascript": "^1.0.27"
+  }
+}
