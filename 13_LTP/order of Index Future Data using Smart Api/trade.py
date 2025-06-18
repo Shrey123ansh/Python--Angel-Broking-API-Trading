@@ -31,21 +31,33 @@ def initializeSymbolTokenMap():
     print("Symbol Token Map Initialized")
 
 
-def getTokenInfo(exch_seg, instrumenttype, symbol, strike_price=None, pe_ce=None):
-    df = token_df.copy()
-    if exch_seg == "NSE":
-        return df[(df["exch_seg"] == "NSE") & (df["symbol"] == symbol)]
-    elif exch_seg == "NFO":
-        strike_price = strike_price * 100 if strike_price is not None else None
+def getTokenInfo(exch_seg, instrumenttype, symbol, strike_price, pe_ce):
+    # Load the instrument data if not already available globally
+    # Example: df = pd.read_csv("instruments.csv") or keep it as a global DataFrame
+    global df
+
+    if exch_seg == "NFO":
         return df[
             (df["exch_seg"] == "NFO")
             & (df["instrumenttype"] == instrumenttype)
             & (df["name"] == symbol)
-            & ((df["strike"] == strike_price) if strike_price is not None else True)
-            & ((df["optiontype"] == pe_ce) if pe_ce is not None else True)
+        ]
+    elif exch_seg == "NFO" and instrumenttype == "FUTIDX":
+        return df[
+            (df["exch_seg"] == "NFO")
+            & (df["instrumenttype"] == instrumenttype)
+            & (df["name"] == symbol)
+        ]
+    elif exch_seg == "NFO" and instrumenttype in ["OPTSTK", "OPTIDX"]:
+        return df[
+            (df["exch_seg"] == "NFO")
+            & (df["instrumenttype"] == instrumenttype)
+            & (df["name"] == symbol)
+            & (df["strike_price"] == float(strike_price))
+            & (df["option_type"] == pe_ce)
         ]
     else:
-        return pd.DataFrame()
+        return pd.DataFrame()  # return empty DataFrame if no match
 
 
 def place_order(token, symbol, qty, exch_seg, buy_sell, ordertype, price):
@@ -68,6 +80,24 @@ def place_order(token, symbol, qty, exch_seg, buy_sell, ordertype, price):
         print("The order ID is: {}".format(orderId))
     except Exception as e:
         print("Order placement failed: {}".format(e))
+
+
+def initializeSymbolTokenMap():
+    f_token = getTokenInfo("NFO", "FUTIDX", "NIFTY", "", "").iloc[0]
+    print(f_token)
+
+    symbol = f_token["symbol"]
+    token = f_token["token"]
+    lot = f_token["lotsize"]
+
+    ltp = obj.ltpData("NFO", symbol, token)
+    print(ltp)
+
+    Ltp = ltp["data"]["ltp"]
+    print(Ltp)
+
+    order_id = place_order(token, symbol, lot, "NFO", "BUY", "MARKET", 0)
+    print(order_id)
 
 
 # //Note: need to complete the code
