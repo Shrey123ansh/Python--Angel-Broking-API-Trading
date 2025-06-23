@@ -1,9 +1,13 @@
 const axios = require("axios");
 
 // Instrument tokens
+// Instrument tokens
 const tickerData = {
   NIFTY: { id: 256265 },
   BANKNIFTY: { id: 260105 },
+  SBIN: { id: 779521 },
+  SRF: { id: 837889 },
+  KTKBANK: { id: 2061825 },
 };
 
 // Interval mapping
@@ -17,7 +21,7 @@ const KI = {
 
 // Zerodha Kite `enctoken` — must be updated daily
 const ENC_TOKEN =
-  "enctoken FQexk56bfeUXwp/HY4aAEUF8J/QQ3gyuukUEUNNY3ATvLEPXDOX7goFA2+nZXK5Og6CLll6oHhYCt7DYTdcDurljG0c3tVA6zUPcq+63L4HdWMuu+Nrz+A=="; // Replace securely
+  "enctoken ax33sqPMbIUhl7cga8qG44Kx37aaAEZoY3ec4q00VohWMglM+MqvqsKo0IbTwvIEnFNhs1UWrcnFvPlFk7vKD0T+f3/vVeJXtlHdts+fPl4P2w0022Fx0w=="; // Replace securely
 
 // Axios instance with enctoken cookie
 const axiosInstance = axios.create({
@@ -37,35 +41,42 @@ function buildHistoricalUrl({
   return `/oms/instruments/historical/${instrumentToken}/${interval}?user_id=${userId}&oi=1&from=${fromDate}&to=${toDate}`;
 }
 
-function movingAverage(data, len1, len2) {
-  const result = [];
+function calculateMovingAverages(candles, len1, len2) {
+  const result = [...candles];
 
+  // Simple Moving Average
+  for (let i = 0; i < candles.length; i++) {
+    if (i + 1 >= len1) {
+      const sum = candles
+        .slice(i + 1 - len1, i + 1)
+        .reduce((acc, val) => acc + val.close, 0);
+      result[i].MA_Simple = sum / len1;
+    } else {
+      result[i].MA_Simple = null;
+    }
+  }
+
+  // Exponential Moving Average
   let emaPrev = null;
+  const k = 2 / (len2 + 1);
 
-  for (let i = 0; i < data.length; i++) {
-    const candle = { ...data[i] };
+  for (let i = 0; i < candles.length; i++) {
+    const close = candles[i].close;
 
-    // === SMA Calculation ===
-    if (i >= len1 - 1) {
-      const smaSlice = data.slice(i - len1 + 1, i + 1);
-      const sma = smaSlice.reduce((sum, c) => sum + c.close, 0) / len1;
-      candle.MA_Simple = parseFloat(sma.toFixed(2));
+    if (i + 1 < len2) {
+      result[i].MA_Exponential = null;
+    } else if (i + 1 === len2) {
+      // First EMA is just SMA
+      const sma =
+        candles
+          .slice(i + 1 - len2, i + 1)
+          .reduce((acc, val) => acc + val.close, 0) / len2;
+      result[i].MA_Exponential = sma;
+      emaPrev = sma;
+    } else {
+      emaPrev = close * k + emaPrev * (1 - k);
+      result[i].MA_Exponential = emaPrev;
     }
-
-    // === EMA Calculation ===
-    if (i >= len2 - 1) {
-      const alpha = 2 / (len2 + 1);
-      if (emaPrev === null) {
-        // Seed EMA using SMA of the first len2 candles
-        const seedSlice = data.slice(i - len2 + 1, i + 1);
-        emaPrev = seedSlice.reduce((sum, c) => sum + c.close, 0) / len2;
-      } else {
-        emaPrev = data[i].close * alpha + emaPrev * (1 - alpha);
-      }
-      candle.MA_Exponential = parseFloat(emaPrev.toFixed(2));
-    }
-
-    result.push(candle);
   }
 
   return result;
@@ -98,7 +109,7 @@ async function getCandles(symbol, fromDate, toDate, timeframe) {
       close: c[4],
       volume: c[5],
     }));
-    const data = movingAverage(formattedData, 8, 10);
+    const data = calculateMovingAverages(formattedData, 8, 10);
     return data;
   } catch (err) {
     console.error(
@@ -113,7 +124,7 @@ async function getCandles(symbol, fromDate, toDate, timeframe) {
 (async () => {
   console.log("Start");
 
-  const data = await getCandles("NIFTY", "2025-06-09", "2025-06-11", "5m");
+  const data = await getCandles("SBIN", "2025-06-20", "2025-06-23", "5m");
 
   if (data.length > 0) {
     console.log("OHLC Data (JSON):");

@@ -44,6 +44,8 @@ def OHLCHistory(symbol, token, interval, fdate, todate):
         print("Historic API failed:", e)
         return pd.DataFrame()
 
+        
+
 
 # === Hammer Candlestick Pattern Detector ===
 def hammer(ohlc_df):

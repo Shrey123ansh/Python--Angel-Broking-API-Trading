@@ -4,6 +4,9 @@ const axios = require("axios");
 const tickerData = {
   NIFTY: { id: 256265 },
   BANKNIFTY: { id: 260105 },
+  SBIN: { id: 779521 },
+  SRF: { id: 837889 },
+  KTKBANK: { id: 2061825 },
 };
 
 // Interval mapping
@@ -17,7 +20,7 @@ const KI = {
 
 // Zerodha Kite `enctoken` — must be updated daily
 const ENC_TOKEN =
-  "enctoken FQexk56bfeUXwp/HY4aAEUF8J/QQ3gyuukUEUNNY3ATvLEPXDOX7goFA2+nZXK5Og6CLll6oHhYCt7DYTdcDurljG0c3tVA6zUPcq+63L4HdWMuu+Nrz+A=="; // Replace securely
+  "enctoken ax33sqPMbIUhl7cga8qG44Kx37aaAEZoY3ec4q00VohWMglM+MqvqsKo0IbTwvIEnFNhs1UWrcnFvPlFk7vKD0T+f3/vVeJXtlHdts+fPl4P2w0022Fx0w=="; // Replace securely
 
 // Axios instance with enctoken cookie
 const axiosInstance = axios.create({
@@ -116,7 +119,7 @@ function calculateATR(data, n) {
 (async () => {
   console.log("Start");
 
-  const data = await getCandles("NIFTY", "2025-06-09", "2025-06-11", "5m");
+  const data = await getCandles("SBIN", "2025-06-20", "2025-06-23", "5m");
 
   if (data.length > 0) {
     console.log("OHLC + Hammer Pattern Data:");

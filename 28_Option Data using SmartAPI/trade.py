@@ -64,7 +64,7 @@ def getCandleData(symbolInfo):
             "todate": to_date
         }
 
-        res_json = obj.getCandleData(historicParam)
+        res_json = obj.getCanddleData(historicParam)
 
         columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
         df = pd.DataFrame(res_json['data'], columns=columns)

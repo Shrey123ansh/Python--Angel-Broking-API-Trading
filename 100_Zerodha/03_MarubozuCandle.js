@@ -4,6 +4,9 @@ const axios = require("axios");
 const tickerData = {
   NIFTY: { id: 256265 },
   BANKNIFTY: { id: 260105 },
+  SBIN: { id: 779521 },
+  SRF: { id: 837889 },
+  KTKBANK: { id: 2061825 },
 };
 
 // Interval mapping
@@ -17,7 +20,7 @@ const KI = {
 
 // Zerodha Kite `enctoken` — must be updated daily
 const ENC_TOKEN =
-  "enctoken FQexk56bfeUXwp/HY4aAEUF8J/QQ3gyuukUEUNNY3ATvLEPXDOX7goFA2+nZXK5Og6CLll6oHhYCt7DYTdcDurljG0c3tVA6zUPcq+63L4HdWMuu+Nrz+A=="; // Replace securely
+  "enctoken ax33sqPMbIUhl7cga8qG44Kx37aaAEZoY3ec4q00VohWMglM+MqvqsKo0IbTwvIEnFNhs1UWrcnFvPlFk7vKD0T+f3/vVeJXtlHdts+fPl4P2w0022Fx0w=="; // Replace securely
 
 // Axios instance with enctoken cookie
 const axiosInstance = axios.create({
@@ -66,7 +69,7 @@ async function getCandles(symbol, fromDate, toDate, timeframe) {
     }));
 
     // Add hammer pattern
-    const ma_df = detectMarubozuPattern(formattedData);
+    const ma_df = detectMarubozu(formattedData);
     const data = ma_df.filter((candle) => candle.maru_bozu !== false);
     return data;
   } catch (err) {
@@ -78,40 +81,40 @@ async function getCandles(symbol, fromDate, toDate, timeframe) {
   }
 }
 
-function detectMarubozuPattern(data) {
-  const candleSizes = data.map((c) => Math.abs(c.close - c.open));
-  const sorted = [...candleSizes].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  const medianCandleSize =
-    sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+function detectMarubozu(candles) {
+  const getMedian = (arr) => {
+    const sorted = [...arr].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0
+      ? (sorted[mid - 1] + sorted[mid]) / 2
+      : sorted[mid];
+  };
 
-  return data.map((candle) => {
-    const { open, high, low, close } = candle;
-    const h_c = high - close;
-    const l_o = low - open;
-    const h_o = high - open;
-    const l_c = low - close;
+  const bodySizes = candles.map((c) => Math.abs(c.close - c.open));
+  const avgCandleSize = getMedian(bodySizes);
 
-    const body = Math.abs(close - open);
-    const maxWickGreen = Math.max(Math.abs(h_c), Math.abs(l_o));
-    const maxWickRed = Math.max(Math.abs(h_o), Math.abs(l_c));
+  return candles.map((candle) => {
+    const h_c = candle.high - candle.close;
+    const l_o = candle.low - candle.open;
+    const h_o = candle.high - candle.open;
+    const l_c = candle.low - candle.close;
 
-    let maru_bozu = false;
-    if (
-      close > open &&
-      body > 2 * medianCandleSize &&
-      maxWickGreen < 0.003 * medianCandleSize
-    ) {
-      maru_bozu = "maru_bozu_green";
-    } else if (
-      open > close &&
-      body > 2 * medianCandleSize &&
-      maxWickRed < 0.003 * medianCandleSize
-    ) {
-      maru_bozu = "maru_bozu_red";
-    }
+    const greenCondition =
+      candle.close - candle.open > 2 * avgCandleSize &&
+      Math.max(Math.abs(h_c), Math.abs(l_o)) < 0.003 * avgCandleSize;
 
-    return { ...candle, maru_bozu };
+    const redCondition =
+      candle.open - candle.close > 2 * avgCandleSize &&
+      Math.max(Math.abs(h_o), Math.abs(l_c)) < 0.003 * avgCandleSize;
+
+    return {
+      ...candle,
+      maru_bozu: greenCondition
+        ? "maru_bozu_green"
+        : redCondition
+        ? "maru_bozu_red"
+        : false,
+    };
   });
 }
 
@@ -119,7 +122,7 @@ function detectMarubozuPattern(data) {
 (async () => {
   console.log("Start");
 
-  const data = await getCandles("NIFTY", "2021-01-06", "2021-06-05", "15m");
+  const data = await getCandles("SBIN", "2025-06-01", "2025-06-23", "5m");
 
   if (data.length > 0) {
     console.log("OHLC + Hammer Pattern Data:");
