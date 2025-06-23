@@ -13,7 +13,7 @@ const tickerData = {
 
 // Zerodha Kite `enctoken` — must be updated daily
 const ENC_TOKEN =
-  "enctoken 1NtaCcYZsgMBnefNkBmCsalEycLLFUEDfeP4f1at31dz4OA6bNGjxkTfLOxUOfGqs+TM5N6rUnGdhUnLpk91Fj3yJwp0jUfqF2NoXnUo89qf0Ru/O1BJjA=="; // Replace securely
+  "enctoken ax33sqPMbIUhl7cga8qG44Kx37aaAEZoY3ec4q00VohWMglM+MqvqsKo0IbTwvIEnFNhs1UWrcnFvPlFk7vKD0T+f3/vVeJXtlHdts+fPl4P2w0022Fx0w=="; // Replace securely
 
 // Axios instance with enctoken cookie
 const axiosInstance = axios.create({
@@ -42,48 +42,65 @@ const KI = {
   day: "day",
 };
 
-function rollingMax(arr, period) {
-  return arr.map((_, i) =>
-    i < period - 1 ? null : Math.max(...arr.slice(i - period + 1, i + 1))
-  );
-}
+function calculateStochastic(data, lookback = 14, kPeriod = 3, dPeriod = 3) {
+  const result = [];
+  const kSmoothedList = [];
 
-function rollingMin(arr, period) {
-  return arr.map((_, i) =>
-    i < period - 1 ? null : Math.min(...arr.slice(i - period + 1, i + 1))
-  );
-}
+  for (let i = 0; i < data.length; i++) {
+    if (i < lookback - 1) {
+      result.push({
+        ...data[i],
+        K: undefined,
+        D: undefined,
+      });
+      continue;
+    }
 
-function sma(arr, period) {
-  return arr.map((_, i) =>
-    i < period - 1
-      ? null
-      : arr.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period
-  );
-}
+    // Highest High and Lowest Low over lookback period
+    const slice = data.slice(i - lookback + 1, i + 1);
+    const highVals = slice.map((d) => d.high);
+    const lowVals = slice.map((d) => d.low);
 
-function stochasticOscillator(df, lookback = 14, k = 3, d = 3) {
-  const highs = df.map((row) => row.high);
-  const lows = df.map((row) => row.low);
-  const closes = df.map((row) => row.close);
+    const highestHigh = Math.max(...highVals);
+    const lowestLow = Math.min(...lowVals);
 
-  const HH = rollingMax(highs, lookback);
-  const LL = rollingMin(lows, lookback);
+    const close = data[i].close;
 
-  // Calculate raw %K
-  const rawK = closes.map((close, i) => {
-    if (HH[i] === null || LL[i] === null || HH[i] === LL[i]) return null;
-    return (100 * (close - LL[i])) / (HH[i] - LL[i]);
-  });
+    // Raw %K
+    const kRaw = (100 * (close - lowestLow)) / (highestHigh - lowestLow);
 
-  const smoothK = sma(rawK, k);
-  const smoothD = sma(smoothK, d);
+    // Smooth %K over kPeriod
+    const recentKRaw = result
+      .slice(Math.max(0, result.length - (kPeriod - 1)), result.length)
+      .map((d) => (d.K_raw !== undefined ? d.K_raw : null))
+      .filter((v) => v !== null);
 
-  return df.map((row, i) => ({
-    ...row,
-    "%K": smoothK[i],
-    "%D": smoothD[i],
-  }));
+    recentKRaw.push(kRaw);
+
+    const kSmoothed =
+      recentKRaw.length === kPeriod
+        ? recentKRaw.reduce((a, b) => a + b, 0) / kPeriod
+        : undefined;
+
+    if (kSmoothed !== undefined) kSmoothedList.push(kSmoothed);
+
+    // Smooth %D over dPeriod from %K smoothed values
+    const recentKSmoothed = kSmoothedList.slice(-dPeriod);
+    const dSmoothed =
+      recentKSmoothed.length === dPeriod
+        ? recentKSmoothed.reduce((a, b) => a + b, 0) / dPeriod
+        : undefined;
+
+    result.push({
+      ...data[i],
+      K_raw: kRaw,
+      K: kSmoothed !== undefined ? parseFloat(kSmoothed.toFixed(2)) : undefined,
+      D: dSmoothed !== undefined ? parseFloat(dSmoothed.toFixed(2)) : undefined,
+    });
+  }
+
+  // Optionally remove K_raw if not needed
+  return result.map(({ K_raw, ...rest }) => rest);
 }
 
 // Function to get historical candles and return as JSON
@@ -115,7 +132,7 @@ async function getCandles(symbol, fromDate, toDate, timeframe) {
     }));
 
     // Add hammer pattern
-    const hammer_df = stochasticOscillator(formattedData, 14, 3, 3);
+    const hammer_df = calculateStochastic(formattedData, 14, 3, 3);
     // const hammerCandles = hammer_df.filter((row) => row.hammer === true);
 
     return hammer_df;
@@ -129,7 +146,7 @@ async function getCandles(symbol, fromDate, toDate, timeframe) {
 }
 
 async function main() {
-  const data = await getCandles("SBIN", "2025-06-09", "2025-06-11", "5m");
+  const data = await getCandles("NIFTY", "2025-06-23", "2025-06-23", "5m");
   console.log("Data:", data);
 }
 

@@ -13,7 +13,7 @@ const tickerData = {
 
 // Zerodha Kite `enctoken` — must be updated daily
 const ENC_TOKEN =
-  "enctoken 1NtaCcYZsgMBnefNkBmCsalEycLLFUEDfeP4f1at31dz4OA6bNGjxkTfLOxUOfGqs+TM5N6rUnGdhUnLpk91Fj3yJwp0jUfqF2NoXnUo89qf0Ru/O1BJjA=="; // Replace securely
+  "enctoken ax33sqPMbIUhl7cga8qG44Kx37aaAEZoY3ec4q00VohWMglM+MqvqsKo0IbTwvIEnFNhs1UWrcnFvPlFk7vKD0T+f3/vVeJXtlHdts+fPl4P2w0022Fx0w=="; // Replace securely
 
 // Axios instance with enctoken cookie
 const axiosInstance = axios.create({
@@ -44,106 +44,97 @@ const KI = {
 
 function calculateATR(data, period) {
   const trList = [];
+  const atr = [];
   for (let i = 0; i < data.length; i++) {
     const high = data[i].high;
     const low = data[i].low;
-    const closePrev = i > 0 ? data[i - 1].close : high;
+    const prevClose = i > 0 ? data[i - 1].close : data[i].close;
 
     const hl = high - low;
-    const hc = Math.abs(high - closePrev);
-    const lc = Math.abs(low - closePrev);
+    const hc = Math.abs(high - prevClose);
+    const lc = Math.abs(low - prevClose);
 
-    trList.push(Math.max(hl, hc, lc));
-  }
+    const tr = Math.max(hl, hc, lc);
+    trList.push(tr);
 
-  const atr = [];
-  let sum = 0;
-  for (let i = 0; i < trList.length; i++) {
-    sum += trList[i];
-    if (i >= period - 1) {
-      if (i === period - 1) {
-        atr.push(sum / period);
-      } else {
-        const prevATR = atr[atr.length - 1];
-        atr.push((prevATR * (period - 1) + trList[i]) / period);
-      }
+    if (i === period - 1) {
+      const initialATR = trList.slice(0, period).reduce((a, b) => a + b, 0) / period;
+      atr.push(initialATR);
+    } else if (i >= period) {
+      const prevATR = atr[atr.length - 1];
+      const currentATR = (prevATR * (period - 1) + trList[i]) / period;
+      atr.push(currentATR);
     } else {
-      atr.push(null);
+      atr.push(null); // Not enough data yet
     }
   }
   return atr;
 }
 
-function exponentialMovingAverage(data, period) {
-  const ema = [];
-  let k = 2 / (period + 1);
-  let prev = null;
-  for (let i = 0; i < data.length; i++) {
-    if (data[i] === null) {
-      ema.push(null);
-    } else if (prev === null) {
-      prev = data[i];
-      ema.push(prev);
-    } else {
-      const val = data[i] * k + prev * (1 - k);
-      ema.push(val);
-      prev = val;
-    }
-  }
-  return ema;
-}
-
 function calculateADX(data, period = 14) {
-  const upMove = [];
-  const downMove = [];
-  const plusDM = [];
-  const minusDM = [];
+  const atr = calculateATR(data, period);
+  const result = [];
+
+  let plusDM_EMA = null;
+  let minusDM_EMA = null;
+  let adxEMA = null;
+
+  const alpha = 1 / period;
 
   for (let i = 0; i < data.length; i++) {
-    const currHigh = data[i].high;
-    const currLow = data[i].low;
-    const prevHigh = i > 0 ? data[i - 1].high : currHigh;
-    const prevLow = i > 0 ? data[i - 1].low : currLow;
+    const current = data[i];
+    const prev = data[i - 1];
 
-    const up = currHigh - prevHigh;
-    const down = prevLow - currLow;
+    if (!prev || atr[i] === null) {
+      result.push({
+        time: current.datetime || current.time,
+        plusDI: undefined,
+        minusDI: undefined,
+        ADX: undefined,
+      });
+      continue;
+    }
 
-    upMove.push(up > down && up > 0 ? up : 0);
-    downMove.push(down > up && down > 0 ? down : 0);
+    const upMove = current.high - prev.high;
+    const downMove = prev.low - current.low;
+
+    const plusDM = upMove > downMove && upMove > 0 ? upMove : 0;
+    const minusDM = downMove > upMove && downMove > 0 ? downMove : 0;
+
+    if (plusDM_EMA === null) {
+      plusDM_EMA = plusDM;
+      minusDM_EMA = minusDM;
+    } else {
+      plusDM_EMA = alpha * plusDM + (1 - alpha) * plusDM_EMA;
+      minusDM_EMA = alpha * minusDM + (1 - alpha) * minusDM_EMA;
+    }
+
+    const plusDI = (100 * plusDM_EMA) / atr[i];
+    const minusDI = (100 * minusDM_EMA) / atr[i];
+    const dx = (100 * Math.abs(plusDI - minusDI)) / (plusDI + minusDI || 1);
+
+    if (adxEMA === null) {
+      adxEMA = dx;
+    } else {
+      adxEMA = alpha * dx + (1 - alpha) * adxEMA;
+    }
+
+    result.push({
+      time: current.datetime || current.time,
+      plusDI: parseFloat(plusDI.toFixed(2)),
+      minusDI: parseFloat(minusDI.toFixed(2)),
+      ADX: parseFloat(adxEMA.toFixed(2)),
+    });
   }
 
-  const atr = calculateATR(data, period);
-  const plusDI = exponentialMovingAverage(
-    (plusDM = upMove.map((val, i) => (atr[i] ? (100 * val) / atr[i] : null))),
-    period
-  );
-  const minusDI = exponentialMovingAverage(
-    (minusDM = downMove.map((val, i) =>
-      atr[i] ? (100 * val) / atr[i] : null
-    )),
-    period
-  );
-
-  const dx = plusDI.map((pdi, i) => {
-    const mdi = minusDI[i];
-    if (pdi === null || mdi === null || pdi + mdi === 0) return null;
-    return (100 * Math.abs(pdi - mdi)) / (pdi + mdi);
-  });
-
-  const adx = exponentialMovingAverage(dx, period);
-
-  // Combine into final JSON
-  return data.map((row, i) => ({
-    datetime: row.datetime,
-    "+DI": plusDI[i],
-    "-DI": minusDI[i],
-    ADX: adx[i],
-  }));
+  return result;
 }
 
 // Function to get historical candles and return as JSON
 async function getCandles(symbol, fromDate, toDate, timeframe) {
   try {
+    const period = 14; // ✅ FIX: define the period here
+
     const token = tickerData[symbol].id;
     const interval = KI[timeframe];
 
@@ -157,7 +148,6 @@ async function getCandles(symbol, fromDate, toDate, timeframe) {
     console.log("Requesting:", url);
 
     const response = await axiosInstance.get(url);
-
     const candles = response.data.data.candles;
 
     const formattedData = candles.map((c) => ({
@@ -169,8 +159,8 @@ async function getCandles(symbol, fromDate, toDate, timeframe) {
       volume: c[5],
     }));
 
-    // Add hammer pattern
-    const adxResult = calculateADX(formattedData, 14);
+    // 🔧 Use the declared period
+    const adxResult = calculateADX(formattedData, period);
 
     return adxResult;
   } catch (err) {
@@ -183,7 +173,7 @@ async function getCandles(symbol, fromDate, toDate, timeframe) {
 }
 
 async function main() {
-  const data = await getCandles("NIFTY", "2025-06-09", "2025-06-11", "5m");
+  const data = await getCandles("NIFTY", "2025-06-23", "2025-06-23", "5m");
   console.log("Data:", data);
 }
 

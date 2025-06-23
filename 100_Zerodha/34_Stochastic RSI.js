@@ -17,7 +17,7 @@ const KI = {
 
 // Zerodha Kite `enctoken` — must be updated daily
 const ENC_TOKEN =
-  "enctoken 1NtaCcYZsgMBnefNkBmCsalEycLLFUEDfeP4f1at31dz4OA6bNGjxkTfLOxUOfGqs+TM5N6rUnGdhUnLpk91Fj3yJwp0jUfqF2NoXnUo89qf0Ru/O1BJjA=="; // Replace securely
+  "enctoken ax33sqPMbIUhl7cga8qG44Kx37aaAEZoY3ec4q00VohWMglM+MqvqsKo0IbTwvIEnFNhs1UWrcnFvPlFk7vKD0T+f3/vVeJXtlHdts+fPl4P2w0022Fx0w=="; // Replace securely
 
 // Axios instance with enctoken cookie
 const axiosInstance = axios.create({
@@ -67,14 +67,15 @@ async function getCandles(symbol, fromDate, toDate, timeframe) {
 
     // Add hammer pattern
     const calculateStoch = calculateStochRSI(formattedData, 14, 3, 3);
-    const lastFive = result.slice(-5).map((row) => ({
+    const result = calculateStoch.slice(-5).map((row) => ({
+      datetime: row.datetime,
       close: row.close,
       K: row.K,
       D: row.D,
       SRSI: row.SRSI,
     }));
 
-    return calculateStoch;
+    return result;
   } catch (err) {
     console.error(
       "Failed to fetch candle data:",
@@ -85,89 +86,81 @@ async function getCandles(symbol, fromDate, toDate, timeframe) {
 }
 
 function calculateStochRSI(data, period = 14, smoothK = 3, smoothD = 3) {
-  const rsi = [];
-  const gains = [];
-  const losses = [];
+  const closes = data.map(d => d.close);
+  const deltas = closes.map((v, i) => i === 0 ? 0 : v - closes[i - 1]);
 
-  const stochRSI = [];
-  const K = [];
-  const D = [];
+  // Gains and losses using clipping
+  const gains = deltas.map(d => Math.max(d, 0));
+  const losses = deltas.map(d => Math.max(-d, 0));
 
-  const close = data.map((item) => item.close);
-  const result = data.map((item, index) => ({ ...item }));
+  const avgGains = [];
+  const avgLosses = [];
+  const rsis = [];
 
-  // Calculate gain/loss
-  for (let i = 1; i < close.length; i++) {
-    const delta = close[i] - close[i - 1];
-    gains.push(delta > 0 ? delta : 0);
-    losses.push(delta < 0 ? -delta : 0);
-  }
-
-  // Compute RSI
-  for (let i = 0; i < close.length; i++) {
+  for (let i = 0; i < closes.length; i++) {
     if (i < period) {
-      rsi.push(null);
-    } else {
-      const avgGain =
-        gains.slice(i - period, i).reduce((a, b) => a + b, 0) / period;
-      const avgLoss =
-        losses.slice(i - period, i).reduce((a, b) => a + b, 0) / period;
-      const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-      rsi.push(100 - 100 / (1 + rs));
+      avgGains.push(null);
+      avgLosses.push(null);
+      rsis.push(null);
+      continue;
     }
+
+    const gainSlice = gains.slice(i - period + 1, i + 1);
+    const lossSlice = losses.slice(i - period + 1, i + 1);
+    const avgGain = gainSlice.reduce((a, b) => a + b, 0) / period;
+    const avgLoss = lossSlice.reduce((a, b) => a + b, 0) / period;
+    avgGains.push(avgGain);
+    avgLosses.push(avgLoss);
+
+    const rs = avgGain / (avgLoss || 1e-10); // avoid div by zero
+    const rsi = 100 - (100 / (1 + rs));
+    rsis.push(rsi);
   }
 
-  // Compute StochRSI
-  for (let i = 0; i < rsi.length; i++) {
-    if (i < period * 2) {
-      stochRSI.push(null);
-    } else {
-      const rsiSlice = rsi.slice(i - period + 1, i + 1);
-      const minRSI = Math.min(...rsiSlice);
-      const maxRSI = Math.max(...rsiSlice);
-      const currentRSI = rsi[i];
-      const value = (currentRSI - minRSI) / (maxRSI - minRSI);
-      stochRSI.push(value);
+  // Calculate StochRSI
+  const stochRSIs = [];
+  for (let i = 0; i < rsis.length; i++) {
+    if (i < period * 2 - 1 || rsis[i] == null) {
+      stochRSIs.push(null);
+      continue;
     }
+    const rsiSlice = rsis.slice(i - period + 1, i + 1);
+    const minRSI = Math.min(...rsiSlice);
+    const maxRSI = Math.max(...rsiSlice);
+    const stochRsi = (rsis[i] - minRSI) / (maxRSI - minRSI || 1e-10); // avoid div by 0
+    stochRSIs.push(stochRsi);
   }
 
-  // Smooth K
-  for (let i = 0; i < stochRSI.length; i++) {
-    if (i < period * 2 + smoothK - 1) {
-      K.push(null);
-    } else {
-      const slice = stochRSI.slice(i - smoothK + 1, i + 1);
-      const avg = slice.reduce((a, b) => a + b, 0) / smoothK;
-      K.push(avg);
-    }
-  }
+  // Smooth %K
+  const Ks = stochRSIs.map((val, i) => {
+    if (i < smoothK - 1 || val == null) return null;
+    const slice = stochRSIs.slice(i - smoothK + 1, i + 1).filter(x => x != null);
+    return slice.reduce((a, b) => a + b, 0) / slice.length;
+  });
 
-  // Smooth D
-  for (let i = 0; i < K.length; i++) {
-    if (i < period * 2 + smoothK + smoothD - 2) {
-      D.push(null);
-    } else {
-      const slice = K.slice(i - smoothD + 1, i + 1);
-      const avg = slice.reduce((a, b) => a + b, 0) / smoothD;
-      D.push(avg);
-    }
-  }
+  // Smooth %D
+  const Ds = Ks.map((val, i) => {
+    if (i < smoothD - 1 || val == null) return null;
+    const slice = Ks.slice(i - smoothD + 1, i + 1).filter(x => x != null);
+    return slice.reduce((a, b) => a + b, 0) / slice.length;
+  });
 
-  // Combine with input data
-  for (let i = 0; i < data.length; i++) {
-    result[i]["SRSI"] = stochRSI[i] ?? null;
-    result[i]["K"] = K[i] ?? null;
-    result[i]["D"] = D[i] ?? null;
-  }
-
-  return result;
+  // Final result
+  return data.map((entry, i) => ({
+    datetime: entry.datetime || entry.timestamp || entry.date,
+    close: entry.close,
+    SRSI: stochRSIs[i] != null ? Number((stochRSIs[i] * 100).toFixed(2)) : null,
+    K: Ks[i] != null ? Number((Ks[i] * 100).toFixed(2)) : null,
+    D: Ds[i] != null ? Number((Ds[i] * 100).toFixed(2)) : null
+  }));
 }
+
 
 // === Example Usage ===
 (async () => {
   console.log("Start");
 
-  const data = await getCandles("NIFTY", "2025-06-09", "2025-06-11", "15m");
+  const data = await getCandles("NIFTY", "2025-06-23", "2025-06-23", "5m");
 
   if (data.length > 0) {
     console.log("OHLC + Hammer Pattern Data:");

@@ -12,7 +12,7 @@ const tickerData = {
 
 // Zerodha Kite `enctoken` — must be updated daily
 const ENC_TOKEN =
-  "enctoken 9826iOT2t0y9LOxSwRszlzBeUay667iuQ7zS7nnkw9F16Z+nmj34D6nQO/8d1NxMSOQAutuJCCSSjkT/PSrF83A6Nmox8sQGtTqdRc54/7QJVnyC+wvC3g=="; // Replace securely
+  "enctoken ax33sqPMbIUhl7cga8qG44Kx37aaAEZoY3ec4q00VohWMglM+MqvqsKo0IbTwvIEnFNhs1UWrcnFvPlFk7vKD0T+f3/vVeJXtlHdts+fPl4P2w0022Fx0w=="; // Replace securely
 
 // Axios instance with enctoken cookie
 const axiosInstance = axios.create({
@@ -41,42 +41,45 @@ const KI = {
   day: "day",
 };
 
-function calculateRSI(closes, period = 14) {
-  const rsi = new Array(closes.length).fill(null);
-  const gains = [];
-  const losses = [];
+function calculateRSI(data, period = 14) {
+  const rsi = [];
+  let gains = 0;
+  let losses = 0;
 
-  for (let i = 1; i < closes.length; i++) {
-    const delta = closes[i] - closes[i - 1];
-    gains.push(delta > 0 ? delta : 0);
-    losses.push(delta < 0 ? -delta : 0);
+  // Step 1: Calculate initial average gain/loss over the first `period`
+  for (let i = 1; i <= period; i++) {
+    const delta = data[i].close - data[i - 1].close;
+    if (delta >= 0) {
+      gains += delta;
+    } else {
+      losses -= delta; // loss is negative delta
+    }
   }
 
-  let avgGain = 0;
-  let avgLoss = 0;
-
-  // Initialize average gain/loss
-  for (let i = 0; i < period; i++) {
-    avgGain += gains[i];
-    avgLoss += losses[i];
-  }
-
-  avgGain /= period;
-  avgLoss /= period;
-
+  let avgGain = gains / period;
+  let avgLoss = losses / period;
   let rs = avgGain / avgLoss;
-  rsi[period] = 100 - 100 / (1 + rs);
+  let rsiVal = 100 - 100 / (1 + rs);
+  rsi[period] = { ...data[period], rsi: rsiVal };
 
-  // Continue calculation for remaining points
-  for (let i = period + 1; i < closes.length; i++) {
-    const gain = gains[i - 1];
-    const loss = losses[i - 1];
+  // Step 2: Continue using Wilder’s smoothing method
+  for (let i = period + 1; i < data.length; i++) {
+    const delta = data[i].close - data[i - 1].close;
+    const gain = delta > 0 ? delta : 0;
+    const loss = delta < 0 ? -delta : 0;
 
     avgGain = (avgGain * (period - 1) + gain) / period;
     avgLoss = (avgLoss * (period - 1) + loss) / period;
 
     rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-    rsi[i] = 100 - 100 / (1 + rs);
+    rsiVal = 100 - 100 / (1 + rs);
+
+    rsi[i] = { ...data[i], rsi: rsiVal };
+  }
+
+  // Fill in the earlier indices with null
+  for (let i = 0; i < period; i++) {
+    rsi[i] = { ...data[i], rsi: null };
   }
 
   return rsi;
@@ -146,13 +149,13 @@ async function main() {
   console.log("Start");
   stocks = ["SBIN", "SRF", "KTKBANK"];
 
-  const optionToken = getTokenInfo("NFO", "BANKNIFTY", null, "")[0];
+  const optionToken = getTokenInfo("NSE", "SBIN", null, "")[0];
   console.log("SBINToken:", optionToken);
 
   const data = await getCandles(
     optionToken.name,
-    "2025-06-09",
-    "2025-06-11",
+    "2025-06-20",
+    "2025-06-23",
     "5m"
   );
   console.log("Data:", data);

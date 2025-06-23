@@ -12,7 +12,7 @@ const tickerData = {
 
 // Zerodha Kite `enctoken` — must be updated daily
 const ENC_TOKEN =
-  "enctoken 1NtaCcYZsgMBnefNkBmCsalEycLLFUEDfeP4f1at31dz4OA6bNGjxkTfLOxUOfGqs+TM5N6rUnGdhUnLpk91Fj3yJwp0jUfqF2NoXnUo89qf0Ru/O1BJjA=="; // Replace securely
+  "enctoken ax33sqPMbIUhl7cga8qG44Kx37aaAEZoY3ec4q00VohWMglM+MqvqsKo0IbTwvIEnFNhs1UWrcnFvPlFk7vKD0T+f3/vVeJXtlHdts+fPl4P2w0022Fx0w=="; // Replace securely
 
 // Axios instance with enctoken cookie
 const axiosInstance = axios.create({
@@ -49,35 +49,39 @@ function calculateSupertrend(data, atrPeriod = 7, multiplier = 3) {
 
   for (let i = 0; i < atrData.length; i++) {
     const current = atrData[i];
-    const prev = i > 0 ? result[i - 1] : null;
+    const previous = result[i - 1] || {};
 
     const hl2 = (current.high + current.low) / 2;
-    const upperBand = hl2 + multiplier * (current.ATR ?? 0);
-    const lowerBand = hl2 - multiplier * (current.ATR ?? 0);
+    const atr = current.ATR;
 
-    if (i < atrPeriod) {
+    let upperBand = atr !== undefined ? hl2 + multiplier * atr : undefined;
+    let lowerBand = atr !== undefined ? hl2 - multiplier * atr : undefined;
+
+    if (i < atrPeriod || atr === undefined) {
       result.push({
         ...current,
+        UpperBand: undefined,
+        LowerBand: undefined,
         Supertrend: undefined,
-        inUptrend: true,
-        UpperBand: upperBand,
-        LowerBand: lowerBand,
+        inUptrend: undefined,
       });
       continue;
     }
 
-    if (current.close > prev.UpperBand) {
+    // Determine trend direction
+    if (current.close > previous.UpperBand) {
       inUptrend = true;
-    } else if (current.close < prev.LowerBand) {
+    } else if (current.close < previous.LowerBand) {
       inUptrend = false;
     } else {
-      inUptrend = prev.inUptrend;
+      inUptrend = previous.inUptrend;
 
-      if (inUptrend && lowerBand < prev.LowerBand) {
-        lowerBand = prev.LowerBand;
+      // Adjust bands based on trend continuation
+      if (inUptrend && lowerBand < previous.LowerBand) {
+        lowerBand = previous.LowerBand;
       }
-      if (!inUptrend && upperBand > prev.UpperBand) {
-        upperBand = prev.UpperBand;
+      if (!inUptrend && upperBand > previous.UpperBand) {
+        upperBand = previous.UpperBand;
       }
     }
 
@@ -85,17 +89,18 @@ function calculateSupertrend(data, atrPeriod = 7, multiplier = 3) {
 
     result.push({
       ...current,
-      Supertrend: parseFloat(supertrend.toFixed(2)),
-      inUptrend: inUptrend,
       UpperBand: parseFloat(upperBand.toFixed(2)),
       LowerBand: parseFloat(lowerBand.toFixed(2)),
+      Supertrend: parseFloat(supertrend.toFixed(2)),
+      inUptrend,
     });
   }
 
-  return result.map(({ close, Supertrend, inUptrend }) => ({
-    close,
-    Supertrend,
-    inUptrend,
+  return result.map((d) => ({
+    time: d.time,
+    close: d.close,
+    Supertrend: d.Supertrend,
+    inUptrend: d.inUptrend,
   }));
 }
 
@@ -106,7 +111,7 @@ function calculateATR(data, n) {
   let atr = null;
 
   for (let i = 0; i < data.length; i++) {
-    const { high, low, close } = data[i];
+    const { high, low, close, time } = data[i]; // include time
 
     const hl = Math.abs(high - low);
     const hpc = prevClose !== null ? Math.abs(high - prevClose) : 0;
@@ -115,7 +120,6 @@ function calculateATR(data, n) {
     const tr = Math.max(hl, hpc, lpc);
     trList.push(tr);
 
-    // Calculate ATR using EMA formula after n periods
     if (trList.length === n) {
       atr = trList.reduce((sum, val) => sum + val, 0) / n;
     } else if (trList.length > n) {
@@ -126,6 +130,7 @@ function calculateATR(data, n) {
     result.push({
       ...data[i],
       ATR: atr !== null ? parseFloat(atr.toFixed(2)) : undefined,
+      time, // make sure time is explicitly included
     });
 
     prevClose = close;
@@ -133,6 +138,7 @@ function calculateATR(data, n) {
 
   return result;
 }
+
 // Function to get historical candles and return as JSON
 async function getCandles(symbol, fromDate, toDate, timeframe) {
   try {
@@ -153,7 +159,7 @@ async function getCandles(symbol, fromDate, toDate, timeframe) {
     const candles = response.data.data.candles;
 
     const formattedData = candles.map((c) => ({
-      datetime: c[0],
+      time: c[0],
       open: c[1],
       high: c[2],
       low: c[3],
@@ -197,13 +203,13 @@ async function main() {
   console.log("Start");
   stocks = ["SBIN", "SRF", "KTKBANK"];
 
-  const optionToken = getTokenInfo("NSE", "BANKNIFTY", null, "")[0];
+  const optionToken = getTokenInfo("NSE", "SBIN", null, "")[0];
   console.log("SBINToken:", optionToken);
 
   const data = await getCandles(
     optionToken.name,
-    "2025-06-09",
-    "2025-06-11",
+    "2025-06-20",
+    "2025-06-23",
     "5m"
   );
   console.log("Data:", data);

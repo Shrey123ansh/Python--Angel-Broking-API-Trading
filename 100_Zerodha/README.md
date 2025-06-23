@@ -3,14 +3,7 @@ Remaining:
 02_Historical Data using Smart API
 12_Short Straddle using smart api
 
-24_SuperTrend is not working properly
-
 29_How to Automate Angel One Smart API login using TOTP --need to be tested
-
-33_ADX.js not working
-34_Stochastic RSI not working
-
-10-18 needs to implement ltp logic, currently its just returning tokenId
 
 01- working properly with calculation
 02- working properly with calculation
@@ -20,3 +13,15 @@ Remaining:
 06- working properly with calculation
 07- working properly with calculation
 08- working properly with calculation
+
+10-18 needs to implement ltp logic, currently its just returning tokenId
+
+19- working properly with calculation
+23- working properly with calculation
+24- working properly with calculation
+27- working properly with calculation
+28- working properly with calculation
+32- working properly with calculation
+
+33(ADX)- not working properly with some error in calculation
+34(ADX)- not working properly with some error in calculation

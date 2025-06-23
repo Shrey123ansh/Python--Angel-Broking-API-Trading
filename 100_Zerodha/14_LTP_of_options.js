@@ -2,6 +2,31 @@ const axios = require("axios");
 
 let token_df = [];
 
+const API_KEY = "vcaa0y84pydefqc5"; // Replace with your actual API key
+const ENC_TOKEN = "j0dhwy2drftqftl9p2r3wcg51bg4aysr"; // Replace securely
+
+// Axios instance with enctoken cookie
+const axiosInstance = axios.create({
+  baseURL: "https://api.kite.trade",
+  headers: {
+    "X-Kite-Version": "3",
+    Authorization: `token ${API_KEY}:${ENC_TOKEN}`,
+  },
+});
+
+async function fetchLTP() {
+  try {
+    const response = await axiosInstance.get("/quote/ltp", {
+      params: {
+        i: ["NSE:INFY", "BSE:SENSEX", "NSE:NIFTY 50"],
+      },
+    });
+    console.log(JSON.stringify(response.data, null, 2));
+  } catch (err) {
+    console.error("Error fetching LTP:", err.response?.data || err.message);
+  }
+}
+
 async function initializeSymbolTokenMap() {
   const url =
     "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
@@ -34,15 +59,16 @@ function getTokenInfo(
 }
 
 async function main() {
-  await initializeSymbolTokenMap();
+  await fetchLTP();
+  // await initializeSymbolTokenMap();
 
-  const bankniftyToken = getTokenInfo("NSE", "", "BANKNIFTY1", null, "EQ");
-  console.log("BANKNIFTY:", bankniftyToken);
-  const relianceToken = getTokenInfo("NSE", "", "RELIANCE", null, "EQ");
-  console.log("relianceToken:", relianceToken);
+  // const bankniftyToken = getTokenInfo("NSE", "", "BANKNIFTY1", null, "EQ");
+  // console.log("BANKNIFTY:", bankniftyToken);
+  // const relianceToken = getTokenInfo("NSE", "", "RELIANCE", null, "EQ");
+  // console.log("relianceToken:", relianceToken);
 
-  const optionToken = getTokenInfo("NFO", "OPTIDX", "BANKNIFTY", 6070000, "CE");
-  console.log("BANKNIFTYoptionToken:", optionToken);
+  // const optionToken = getTokenInfo("NFO", "OPTIDX", "BANKNIFTY", 6070000, "CE");
+  // console.log("BANKNIFTYoptionToken:", optionToken);
 }
 
 main();
