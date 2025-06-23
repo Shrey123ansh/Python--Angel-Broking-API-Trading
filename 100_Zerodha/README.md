@@ -25,3 +25,8 @@ Remaining:
 
 33(ADX)- not working properly with some error in calculation
 34(ADX)- not working properly with some error in calculation
+
+whats need to done:
+
+1. find a way to get LTP from any where
+2. 20, 21, 22, 25, 26, 30, 31, how to schedule/strangle/exit
