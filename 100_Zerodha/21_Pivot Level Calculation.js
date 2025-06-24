@@ -40,86 +40,48 @@ function buildHistoricalUrl({
   return `/oms/instruments/historical/${instrumentToken}/${interval}?user_id=${userId}&oi=1&from=${fromDate}&to=${toDate}`;
 }
 
-// Camarilla Level Calculator using daily OHLC candles
-async function calculateCamarillaLevels(symbol, fromDate, toDate) {
+async function calculateCustomPivotLevels(symbol, fromDate, toDate) {
   const dailyData = await getCandles(symbol, fromDate, toDate, "day");
 
   if (dailyData.length < 2) {
-    console.error("Not enough data to calculate Camarilla levels.");
+    console.error("Not enough daily candles to calculate pivot levels.");
     return;
   }
 
-  const prevDay = dailyData[dailyData.length - 2]; // second last daily candle
-  const dphigh = parseFloat(prevDay.high.toFixed(2));
-  const dplow = parseFloat(prevDay.low.toFixed(2));
-  const dpclose = parseFloat(prevDay.close.toFixed(2));
-  const dprange = dphigh - dplow;
+  // Use the second last day for full candle
+  const prevDay = dailyData[dailyData.length - 2];
 
-  const pivot = (dphigh + dplow + dpclose) / 3.0;
-  const bc = (dphigh + dplow) / 2.0;
-  const tc = 2 * pivot - bc;
+  const high = parseFloat(prevDay.high.toFixed(2));
+  const low = parseFloat(prevDay.low.toFixed(2));
+  const close = parseFloat(prevDay.close.toFixed(2));
 
-  const h1 = dpclose + dprange * (1.1 / 12);
-  const h2 = dpclose + dprange * (1.1 / 6);
-  const h3 = dpclose + dprange * (1.1 / 4);
-  const h4 = dpclose + dprange * (1.1 / 2);
-  const h5 = (dphigh / dplow) * dpclose;
+  const pivot = parseFloat(((high + low + close) / 3).toFixed(2));
 
-  const l1 = dpclose - dprange * (1.1 / 12);
-  const l2 = dpclose - dprange * (1.1 / 6);
-  const l3 = dpclose - dprange * (1.1 / 4);
-  const l4 = dpclose - dprange * (1.1 / 2);
-  const l5 = dpclose - (h5 - dpclose);
+  const r1 = parseFloat((2 * pivot - low).toFixed(2));
+  const r2 = parseFloat((pivot + (high - low)).toFixed(2));
+  const r3 = parseFloat((high + 2 * (pivot - low)).toFixed(2));
 
-  console.log(`Camarilla Levels for ${symbol} on ${prevDay.datetime}:`);
-  console.log(
-    "Pivot:",
-    pivot.toFixed(2),
-    "| BC:",
-    bc.toFixed(2),
-    "| TC:",
-    tc.toFixed(2)
-  );
-  console.log(
-    "H1:",
-    h1.toFixed(2),
-    "H2:",
-    h2.toFixed(2),
-    "H3:",
-    h3.toFixed(2),
-    "H4:",
-    h4.toFixed(2),
-    "H5:",
-    h5.toFixed(2)
-  );
-  console.log(
-    "L1:",
-    l1.toFixed(2),
-    "L2:",
-    l2.toFixed(2),
-    "L3:",
-    l3.toFixed(2),
-    "L4:",
-    l4.toFixed(2),
-    "L5:",
-    l5.toFixed(2)
-  );
+  const s1 = parseFloat((2 * pivot - high).toFixed(2));
+  const s2 = parseFloat((pivot - (high - low)).toFixed(2));
+  const s3 = parseFloat((low - 2 * (high - pivot)).toFixed(2));
+
+  console.log(`📈 Custom Pivot Levels for ${symbol} on ${prevDay.datetime}:`);
+  console.log(`Pivot: ${pivot}`);
+  console.log(`R1: ${r1} | R2: ${r2} | R3: ${r3}`);
+  console.log(`S1: ${s1} | S2: ${s2} | S3: ${s3}`);
 
   return {
     date: prevDay.datetime,
+    high,
+    low,
+    close,
     pivot,
-    bc,
-    tc,
-    h1,
-    h2,
-    h3,
-    h4,
-    h5,
-    l1,
-    l2,
-    l3,
-    l4,
-    l5,
+    r1,
+    r2,
+    r3,
+    s1,
+    s2,
+    s3,
   };
 }
 
@@ -169,7 +131,7 @@ async function getCandles(symbol, fromDate, toDate, timeframe) {
   const toDate = "2025-06-24"; // Must include 1 day beyond to cover full last day
 
   // Fetch 5m candles (you already do this)
-  const intradayData = await getCandles("BANKNIFTY", fromDate, toDate, "5m");
+  const intradayData = await getCandles("SBIN", fromDate, toDate, "5m");
 
   if (intradayData.length > 0) {
     console.log("Intraday 5m Data Retrieved:", intradayData.length);
@@ -178,11 +140,7 @@ async function getCandles(symbol, fromDate, toDate, timeframe) {
   }
 
   // === New: Calculate Camarilla levels using daily candles ===
-  const camarilla = await calculateCamarillaLevels(
-    "BANKNIFTY",
-    fromDate,
-    toDate
-  );
+  const camarilla = await calculateCustomPivotLevels("SBIN", fromDate, toDate);
   console.log("Camarilla Output:", camarilla);
 
   console.log("Over");

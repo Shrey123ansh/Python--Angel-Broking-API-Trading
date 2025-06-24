@@ -59,7 +59,7 @@ def OHLCHistory(symbol, token, interval, fdate, todate):
         print("Historic API failed:", e)
         return pd.DataFrame()
 
-
+ 
 def getTokenInfo(symbol, exch_seg="NSE"):
     df = l.token_map  # Assuming token_map is already initialized and loaded
 
